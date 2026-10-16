@@ -22,6 +22,8 @@ barcode labels.
     `Moving + Packing 2026` base.
 -   Accept sets the `Loaded in van` or `Moved to condo` checkbox of that box.
     The app does not change other fields or records.
+-   The 🔦 button turns the camera light on and off. It shows only when the
+    browser can control the light.
 -   Browsers without native Code 128 detection (e.g. Safari) load the
     [barcode-detector](https://github.com/Sec-ant/barcode-detector) polyfill
     from jsDelivr.

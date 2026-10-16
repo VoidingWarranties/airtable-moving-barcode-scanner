@@ -60,9 +60,18 @@ button.link {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
   padding: 0.5rem 1rem;
   font-size: 1.25rem;
   background: rgb(0 0 0 / 0.6);
+}
+
+#torch {
+  margin-left: auto;
+}
+
+#torch[aria-pressed="true"] {
+  background: #fd0;
 }
 
 #log {

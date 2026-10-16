@@ -99,6 +99,8 @@ async function startScanning(fieldName, label) {
   audio.resume();
   $('action-label').textContent = label;
   $('log').replaceChildren();
+  $('torch').hidden = true;
+  $('torch').ariaPressed = 'false';
   show('scanner');
   try {
     detector ??= await createDetector();
@@ -107,6 +109,8 @@ async function startScanning(fieldName, label) {
     if ($('scanner').hidden) return stopScanning();
     $('video').srcObject = stream;
     await $('video').play();
+    const [track] = stream.getVideoTracks();
+    $('torch').hidden = !track.getCapabilities?.().torch;
     await scan(stream);
   } catch (error) {
     alert(error.message);
@@ -240,6 +244,17 @@ $('forget').onclick = () => {
 for (const button of document.querySelectorAll('[data-field]')) {
   button.onclick = () => startScanning(button.dataset.field, button.textContent);
 }
+
+$('torch').onclick = async () => {
+  const on = $('torch').ariaPressed !== 'true';
+  const [track] = stream.getVideoTracks();
+  try {
+    await track.applyConstraints({advanced: [{torch: on}]});
+    $('torch').ariaPressed = String(on);
+  } catch (error) {
+    alert(error.message);
+  }
+};
 
 $('done').onclick = stopScanning;
 
