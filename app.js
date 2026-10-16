@@ -12,8 +12,8 @@ const CAMERA = {
 // Each sound is a list of [frequency in Hz, duration in s] tones.
 const SOUNDS = {
   scan: [[1800, 0.08]],
-  accept: [[660, 0.1], [990, 0.15]],
-  reject: [[180, 0.4]],
+  accept: [[660, 0.04], [990, 0.04]],
+  reject: [[180, 0.08]],
 };
 // A box often stays in view after review. Skip it until it leaves the view.
 const IGNORE_MS = 2000;
