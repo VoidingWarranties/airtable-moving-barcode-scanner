@@ -22,8 +22,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+      # Pages lets browsers cache files for 10 minutes. New file URLs make a
+      # new page also get new code, so the version shown is the code that runs.
       - name: Set version
-        run: sed -i "s/Version dev/Version $(git rev-parse --short HEAD)/" index.html
+        run: |
+          sha=$(git rev-parse --short HEAD)
+          sed -i -E "s/Version dev/Version $sha/; s/(app\.js|style\.css)\"/\1?v=$sha\"/" index.html
       - uses: actions/upload-pages-artifact@v5
         with:
           path: .
