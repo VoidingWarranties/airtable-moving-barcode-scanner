@@ -20,6 +20,9 @@ const IGNORE_MS = 2000;
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// Not all detectors read white-on-black labels, so every other frame is
+// inverted before detection.
+const invertContext = document.createElement('canvas').getContext('2d');
 
 let token = localStorage.getItem('airtableToken');
 let baseId;
@@ -28,6 +31,7 @@ let audio;
 let stream;
 let field;
 let ignored;
+let invertNext = false;
 
 function show(id) {
   for (const section of document.querySelectorAll('body > section')) {
@@ -129,7 +133,9 @@ async function detectBoxId() {
   const video = $('video');
   if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return null;
   const now = Date.now();
-  for (const {rawValue} of await detector.detect(video)) {
+  const frame = invertNext ? invertedFrame(video) : video;
+  invertNext = !invertNext;
+  for (const {rawValue} of await detector.detect(frame)) {
     if (!BOX_ID.test(rawValue)) continue;
     if (rawValue === ignored.code && now - ignored.seenAt < IGNORE_MS) {
       ignored.seenAt = now;
@@ -138,6 +144,18 @@ async function detectBoxId() {
     return rawValue;
   }
   return null;
+}
+
+function invertedFrame(video) {
+  const {canvas} = invertContext;
+  // Resizing also resets the context state.
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  invertContext.drawImage(video, 0, 0);
+  invertContext.globalCompositeOperation = 'difference';
+  invertContext.fillStyle = 'white';
+  invertContext.fillRect(0, 0, canvas.width, canvas.height);
+  return canvas;
 }
 
 async function review(code) {
