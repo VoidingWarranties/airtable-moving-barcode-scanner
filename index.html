@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Box Scanner</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <section id="setup" hidden>
+    <h1>Box Scanner</h1>
+    <form id="token-form">
+      <label for="token">AirTable personal access token</label>
+      <input id="token" type="password" autocomplete="off" required>
+      <button>Save</button>
+    </form>
+    <p id="setup-error" class="error"></p>
+  </section>
+
+  <section id="actions" hidden>
+    <h1>Choose an action</h1>
+    <button data-field="Loaded in van">Mark as loaded into van</button>
+    <button data-field="Moved to condo">Mark as moved into condo</button>
+    <button id="forget" class="link">Forget token</button>
+  </section>
+
+  <section id="scanner" hidden>
+    <video id="video" playsinline muted></video>
+    <header>
+      <span id="action-label"></span>
+      <button id="done">Done</button>
+    </header>
+    <ol id="log"></ol>
+  </section>
+
+  <dialog id="confirm">
+    <form method="dialog">
+      <h2 id="box-code"></h2>
+      <p id="box-name"></p>
+      <p id="box-type"></p>
+      <p id="box-note"></p>
+      <div class="buttons">
+        <button id="reject" value="reject">Reject</button>
+        <button id="accept" value="accept">Accept</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

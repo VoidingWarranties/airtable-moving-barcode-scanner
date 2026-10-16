@@ -1,0 +1,228 @@
+const BASE_NAME = 'Moving + Packing 2026';
+const TABLE = 'Containers';
+const API = 'https://api.airtable.com/v0';
+// Boxes also carry product barcodes. Only accept our own labels.
+const BOX_ID = /^[A-Z]{2}[0-9]+$/;
+// Only loaded when the browser has no native Code 128 detector (e.g. Safari).
+const POLYFILL =
+    'https://cdn.jsdelivr.net/npm/barcode-detector@3.2.2/dist/es/ponyfill.js';
+const CAMERA = {
+  video: {facingMode: 'environment', width: {ideal: 1920}, height: {ideal: 1080}},
+};
+// Each sound is a list of [frequency in Hz, duration in s] tones.
+const SOUNDS = {
+  scan: [[1800, 0.08]],
+  accept: [[660, 0.1], [990, 0.15]],
+  reject: [[180, 0.4]],
+};
+// A box often stays in view after review. Skip it until it leaves the view.
+const IGNORE_MS = 2000;
+
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+let token = localStorage.getItem('airtableToken');
+let baseId;
+let detector;
+let audio;
+let stream;
+let field;
+let ignored;
+
+function show(id) {
+  for (const section of document.querySelectorAll('body > section')) {
+    section.hidden = section.id !== id;
+  }
+}
+
+async function airtable(path, options) {
+  const response = await fetch(`${API}/${path}`, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = body.error;
+    throw new Error(error?.message ?? error?.type ?? error ?? response.status);
+  }
+  return body;
+}
+
+async function init() {
+  if (!token) {
+    show('setup');
+    return;
+  }
+  try {
+    const {bases} = await airtable('meta/bases');
+    baseId = bases.find((base) => base.name === BASE_NAME)?.id;
+    if (!baseId) throw new Error(`Base "${BASE_NAME}" not found.`);
+    show('actions');
+  } catch (error) {
+    $('setup-error').textContent = error.message;
+    show('setup');
+  }
+}
+
+async function createDetector() {
+  const formats = await globalThis.BarcodeDetector?.getSupportedFormats();
+  const Detector = formats?.includes('code_128') ?
+      BarcodeDetector :
+      (await import(POLYFILL)).BarcodeDetector;
+  return new Detector({formats: ['code_128']});
+}
+
+function beep(name) {
+  let time = audio.currentTime;
+  for (const [frequency, duration] of SOUNDS[name]) {
+    const oscillator = new OscillatorNode(audio, {type: 'square', frequency});
+    oscillator.connect(new GainNode(audio, {gain: 0.1}))
+        .connect(audio.destination);
+    oscillator.start(time);
+    time += duration;
+    oscillator.stop(time);
+  }
+}
+
+async function startScanning(fieldName, label) {
+  field = fieldName;
+  ignored = {};
+  // iOS only plays audio from a context that a user gesture started.
+  audio ??= new AudioContext();
+  audio.resume();
+  $('action-label').textContent = label;
+  $('log').replaceChildren();
+  show('scanner');
+  try {
+    detector ??= await createDetector();
+    stream = await navigator.mediaDevices.getUserMedia(CAMERA);
+    // The user can tap Done while the camera starts.
+    if ($('scanner').hidden) return stopScanning();
+    $('video').srcObject = stream;
+    await $('video').play();
+    await scan(stream);
+  } catch (error) {
+    alert(error.message);
+    stopScanning();
+  }
+}
+
+function stopScanning() {
+  stream?.getTracks().forEach((track) => track.stop());
+  stream = null;
+  show('actions');
+}
+
+async function scan(activeStream) {
+  while (true) {
+    const code = await detectBoxId();
+    if (stream !== activeStream) return;
+    if (code) await review(code);
+    await sleep(100);
+  }
+}
+
+async function detectBoxId() {
+  const video = $('video');
+  if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return null;
+  const now = Date.now();
+  for (const {rawValue} of await detector.detect(video)) {
+    if (!BOX_ID.test(rawValue)) continue;
+    if (rawValue === ignored.code && now - ignored.seenAt < IGNORE_MS) {
+      ignored.seenAt = now;
+      continue;
+    }
+    return rawValue;
+  }
+  return null;
+}
+
+async function review(code) {
+  beep('scan');
+  const dialog = $('confirm');
+  $('box-code').textContent = code;
+  $('box-name').textContent = 'Looking up…';
+  $('box-type').textContent = '';
+  $('box-note').textContent = '';
+  $('accept').disabled = true;
+  dialog.returnValue = '';
+  dialog.showModal();
+  const closed = new Promise(
+      (resolve) => dialog.addEventListener('close', resolve, {once: true}));
+
+  let record;
+  try {
+    record = await findBox(code);
+    $('box-name').textContent = record.fields['Contents (short)'] ?? '';
+    $('box-type').textContent = record.fields['Container Type'] ?? '';
+    if (record.fields[field]) $('box-note').textContent = 'Already marked.';
+    $('accept').disabled = false;
+  } catch (error) {
+    $('box-name').textContent = '';
+    $('box-note').textContent = error.message;
+  }
+
+  await closed;
+  ignored = {code, seenAt: Date.now()};
+  if (dialog.returnValue === 'accept') {
+    beep('accept');
+    mark(code, record);
+  } else {
+    beep('reject');
+  }
+}
+
+async function findBox(code) {
+  // The code matches BOX_ID, so it is safe to put in a formula.
+  const params = new URLSearchParams({filterByFormula: `{Code} = '${code}'`});
+  for (const name of ['Contents (short)', 'Container Type', field]) {
+    params.append('fields[]', name);
+  }
+  const {records} = await airtable(`${baseId}/${TABLE}?${params}`);
+  if (records.length === 0) throw new Error('No box has this code.');
+  if (records.length > 1) throw new Error('More than one box has this code.');
+  return records[0];
+}
+
+async function mark(code, record) {
+  const item = document.createElement('li');
+  item.className = 'pending';
+  item.textContent = `${code} ${record.fields['Contents (short)'] ?? ''}`;
+  $('log').prepend(item);
+  try {
+    await airtable(`${baseId}/${TABLE}/${record.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({fields: {[field]: true}}),
+    });
+    item.className = 'saved';
+  } catch (error) {
+    item.className = 'failed';
+    item.textContent += `: ${error.message}`;
+    beep('reject');
+  }
+}
+
+$('token-form').onsubmit = (event) => {
+  event.preventDefault();
+  token = $('token').value.trim();
+  localStorage.setItem('airtableToken', token);
+  $('setup-error').textContent = '';
+  init();
+};
+
+$('forget').onclick = () => {
+  localStorage.removeItem('airtableToken');
+  token = null;
+  show('setup');
+};
+
+for (const button of document.querySelectorAll('[data-field]')) {
+  button.onclick = () => startScanning(button.dataset.field, button.textContent);
+}
+
+$('done').onclick = stopScanning;
+
+init();
