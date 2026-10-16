@@ -24,6 +24,10 @@ barcode labels.
     The app does not change other fields or records.
 -   The 🔦 button turns the camera light on and off. It shows only when the
     browser can control the light.
+-   The token and action pages show the version, which is the short commit
+    SHA. The GitHub Pages workflow sets it, so other copies show `dev`.
+    For the workflow to deploy, set the GitHub Pages source of the repository
+    to "GitHub Actions".
 -   Browsers without native Code 128 detection (e.g. Safari) load the
     [barcode-detector](https://github.com/Sec-ant/barcode-detector) polyfill
     from jsDelivr.

@@ -40,6 +40,12 @@ button.link {
   color: #d33;
 }
 
+.version {
+  margin: 0;
+  color: gray;
+  font-size: 0.875rem;
+}
+
 #scanner {
   position: fixed;
   inset: 0;
