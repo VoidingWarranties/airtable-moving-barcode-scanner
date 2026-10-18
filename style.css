@@ -153,6 +153,15 @@ dialog::backdrop {
   background: rgb(0 0 0 / 0.6);
 }
 
+/* Keeps the scanned barcodes in view. */
+#confirm {
+  margin-bottom: 1rem;
+}
+
+#confirm::backdrop {
+  background: none;
+}
+
 dialog p,
 dialog label {
   margin: 0;
