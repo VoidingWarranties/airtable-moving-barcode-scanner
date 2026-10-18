@@ -157,11 +157,13 @@ dialog label {
   color: white;
 }
 
-#reject {
+#reject,
+#forget-confirm {
   background: #c33;
 }
 
-#room-cancel {
+#room-cancel,
+#forget-cancel {
   background: gray;
 }
 
