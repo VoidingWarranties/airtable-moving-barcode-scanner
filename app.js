@@ -34,6 +34,8 @@ let stream;
 let field;
 let value;
 let ignored;
+// Box records by code, loaded when the action starts.
+let boxes;
 // Box codes accepted since the action started.
 let accepted;
 let invertNext = false;
@@ -124,6 +126,7 @@ async function startScanning(fieldName, fieldValue, label) {
   $('torch').ariaPressed = 'false';
   show('scanner');
   try {
+    boxes = await loadBoxes();
     detector ??= await createDetector();
     stream = await navigator.mediaDevices.getUserMedia(CAMERA);
     // The user can tap Done while the camera starts.
@@ -222,7 +225,6 @@ async function review(code) {
   $('video').pause();
   beep(accepted.has(code) ? 'warn' : 'scan');
   $('box-code').textContent = code;
-  $('box-name').textContent = 'Looking up…';
   $('reject').disabled = false;
   // Stopping now would leave this review open.
   $('done').disabled = true;
@@ -233,7 +235,7 @@ async function review(code) {
 
   let record;
   try {
-    record = await findBox(code);
+    record = findBox(code);
     $('box-name').textContent = record.fields['Contents (short)'] ?? '';
     $('box-type').textContent = record.fields['Container Type'] ?? '';
     // Checkbox values are true. Link values are lists of record IDs.
@@ -268,13 +270,28 @@ function clearReview() {
   $('done').disabled = false;
 }
 
-async function findBox(code) {
-  // The code matches BOX_ID, so it is safe to put in a formula.
-  const params = new URLSearchParams({filterByFormula: `{Code} = '${code}'`});
-  for (const name of ['Contents (short)', 'Container Type', field]) {
+async function loadBoxes() {
+  const params = new URLSearchParams();
+  for (const name of ['Code', 'Contents (short)', 'Container Type', field]) {
     params.append('fields[]', name);
   }
-  const {records} = await airtable(`${baseId}/${TABLE}?${params}`);
+  const byCode = new Map();
+  // Each call returns up to 100 records, plus an offset for the next page.
+  let offset;
+  do {
+    if (offset) params.set('offset', offset);
+    const page = await airtable(`${baseId}/${TABLE}?${params}`);
+    for (const record of page.records) {
+      const code = record.fields.Code;
+      byCode.set(code, [...(byCode.get(code) ?? []), record]);
+    }
+    offset = page.offset;
+  } while (offset);
+  return byCode;
+}
+
+function findBox(code) {
+  const records = boxes.get(code) ?? [];
   if (records.length === 0) throw new Error('No box has this code.');
   if (records.length > 1) throw new Error('More than one box has this code.');
   return records[0];
@@ -291,6 +308,7 @@ async function mark(code, record) {
       method: 'PATCH',
       body: JSON.stringify({fields: {[field]: value}}),
     });
+    record.fields[field] = value;
     item.className = 'saved';
   } catch (error) {
     item.className = 'failed';

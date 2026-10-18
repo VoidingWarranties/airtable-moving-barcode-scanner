@@ -20,7 +20,8 @@ barcode labels.
     on black. A red line, like a scanner laser, crosses each box label in
     view. The image freezes until you accept or reject the box.
 -   Finds the box by the `Code` field of the `Containers` table in the
-    `Moving + Packing 2026` base.
+    `Moving + Packing 2026` base. The app loads all boxes when an action
+    starts, so it shows changes made elsewhere only at the next action.
 -   Accept sets the `Loaded in van` or `Moved to condo` checkbox of that box.
     To set the `Final Location` of boxes instead, tap Record final location,
     choose a room, then tap Start. The app does not change other
