@@ -17,8 +17,8 @@ barcode labels.
 
 -   Reads only Code 128 barcodes with a value that matches `[A-Z][A-Z][0-9]+`.
     The app ignores all other barcodes. Labels can be black on white or white
-    on black. A green box outlines each box label in view. The image freezes
-    until you accept or reject the box.
+    on black. A red line, like a scanner laser, crosses each box label in
+    view. The image freezes until you accept or reject the box.
 -   Finds the box by the `Code` field of the `Containers` table in the
     `Moving + Packing 2026` base.
 -   Accept sets the `Loaded in van` or `Moved to condo` checkbox of that box.

@@ -119,7 +119,7 @@ async function startScanning(fieldName, fieldValue, label) {
   audio.resume();
   $('action-label').textContent = label;
   $('log').replaceChildren();
-  outline([]);
+  showLasers([]);
   $('torch').hidden = true;
   $('torch').ariaPressed = 'false';
   show('scanner');
@@ -163,10 +163,10 @@ async function detectBoxId() {
   const boxes = (await detector.detect(frame))
       .filter(({rawValue}) => BOX_ID.test(rawValue));
   // A label often shows up in only the normal or only the inverted frames, so
-  // outline the labels of the last two frames.
-  const outlined = new Map(
+  // show lasers on the labels of the last two frames.
+  const shown = new Map(
       [...lastBoxes, ...boxes].map((box) => [box.rawValue, box]));
-  outline([...outlined.values()]);
+  showLasers([...shown.values()]);
   lastBoxes = boxes;
   for (const {rawValue} of boxes) {
     if (rawValue === ignored.code && now - ignored.seenAt < IGNORE_MS) {
@@ -190,29 +190,31 @@ function invertedFrame(video) {
   return canvas;
 }
 
-function outline(barcodes) {
+function showLasers(barcodes) {
   const video = $('video');
-  $('outline').setAttribute(
+  $('laser').setAttribute(
       'viewBox', `0 0 ${video.videoWidth} ${video.videoHeight}`);
   const path = (barcode) =>
-      `M${box(barcode).map(({x, y}) => `${x},${y}`).join(' ')}Z`;
-  $('outline').firstElementChild.setAttribute('d', barcodes.map(path).join(''));
+      `M${laser(barcode).map(({x, y}) => `${x},${y}`).join(' ')}`;
+  $('laser').firstElementChild.setAttribute('d', barcodes.map(path).join(''));
 }
 
 // The polyfill reads one row of pixels at a time. Its corners are the ends of
 // the first and last rows it read, so only its sides follow the bars. Returns
-// the smallest box along the bars that holds all corners.
-function box({cornerPoints: [tl, tr, br, bl]}) {
+// the ends of a line across the bars through the middle of the barcode.
+function laser({cornerPoints: [tl, tr, br, bl]}) {
   const rotation = new DOMMatrix().rotateFromVector(
       bl.x - tl.x + br.x - tr.x, bl.y - tl.y + br.y - tr.y);
   const unrotation = rotation.inverse();
   const points = [tl, tr, br, bl].map((p) => unrotation.transformPoint(p));
   const xs = points.map(({x}) => x);
   const ys = points.map(({y}) => y);
-  const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
+  const x = (Math.min(...xs) + Math.max(...xs)) / 2;
   const [minY, maxY] = [Math.min(...ys), Math.max(...ys)];
-  return [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]]
-      .map(([x, y]) => rotation.transformPoint({x, y}));
+  // Like a laser, the line runs a bit past both ends.
+  const overshoot = (maxY - minY) / 10;
+  return [minY - overshoot, maxY + overshoot]
+      .map((y) => rotation.transformPoint({x, y}));
 }
 
 async function review(code) {
