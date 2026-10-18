@@ -37,6 +37,7 @@ let ignored;
 // Box codes accepted since the action started.
 let accepted;
 let invertNext = false;
+let lastBoxes;
 
 function show(id) {
   for (const section of document.querySelectorAll('body > section')) {
@@ -112,11 +113,13 @@ async function startScanning(fieldName, fieldValue, label) {
   value = fieldValue;
   ignored = {};
   accepted = new Set();
+  lastBoxes = [];
   // iOS only plays audio from a context that a user gesture started.
   audio ??= new AudioContext();
   audio.resume();
   $('action-label').textContent = label;
   $('log').replaceChildren();
+  outline([]);
   $('torch').hidden = true;
   $('torch').ariaPressed = 'false';
   show('scanner');
@@ -157,8 +160,15 @@ async function detectBoxId() {
   const now = Date.now();
   const frame = invertNext ? invertedFrame(video) : video;
   invertNext = !invertNext;
-  for (const {rawValue} of await detector.detect(frame)) {
-    if (!BOX_ID.test(rawValue)) continue;
+  const boxes = (await detector.detect(frame))
+      .filter(({rawValue}) => BOX_ID.test(rawValue));
+  // A label often shows up in only the normal or only the inverted frames, so
+  // outline the labels of the last two frames.
+  const outlined = new Map(
+      [...lastBoxes, ...boxes].map((box) => [box.rawValue, box]));
+  outline([...outlined.values()]);
+  lastBoxes = boxes;
+  for (const {rawValue} of boxes) {
     if (rawValue === ignored.code && now - ignored.seenAt < IGNORE_MS) {
       ignored.seenAt = now;
       continue;
@@ -178,6 +188,15 @@ function invertedFrame(video) {
   invertContext.fillStyle = 'white';
   invertContext.fillRect(0, 0, canvas.width, canvas.height);
   return canvas;
+}
+
+function outline(barcodes) {
+  const video = $('video');
+  $('outline').setAttribute(
+      'viewBox', `0 0 ${video.videoWidth} ${video.videoHeight}`);
+  const path = ({cornerPoints}) =>
+      `M${cornerPoints.map(({x, y}) => `${x},${y}`).join(' ')}Z`;
+  $('outline').firstElementChild.setAttribute('d', barcodes.map(path).join(''));
 }
 
 async function review(code) {
