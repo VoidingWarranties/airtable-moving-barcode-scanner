@@ -1,6 +1,11 @@
 const BASE_NAME = 'Moving + Packing 2026';
 const TABLE = 'Containers';
 const ROOMS = 'Destination Room';
+// Box fields the app shows, plus the field of every action.
+const BOX_FIELDS = [
+  'Code', 'Contents (short)', 'Container Type',
+  'Loaded in van', 'Moved to condo', 'Final Location',
+];
 const API = 'https://api.airtable.com/v0';
 // Boxes also carry product barcodes. Only accept our own labels.
 const BOX_ID = /^[A-Z]{2}[0-9]+$/;
@@ -34,7 +39,7 @@ let stream;
 let field;
 let value;
 let ignored;
-// Box records by code, loaded when the action starts.
+// Lists of box records by code, cached in local storage.
 let boxes;
 // Box codes accepted since the action started.
 let accepted;
@@ -126,7 +131,7 @@ async function startScanning(fieldName, fieldValue, label) {
   $('torch').ariaPressed = 'false';
   show('scanner');
   try {
-    boxes = await loadBoxes();
+    boxes ??= await loadBoxes();
     detector ??= await createDetector();
     stream = await navigator.mediaDevices.getUserMedia(CAMERA);
     // The user can tap Done while the camera starts.
@@ -225,6 +230,7 @@ async function review(code) {
   $('video').pause();
   beep(accepted.has(code) ? 'warn' : 'scan');
   $('box-code').textContent = code;
+  $('box-name').textContent = 'Looking up…';
   $('reject').disabled = false;
   // Stopping now would leave this review open.
   $('done').disabled = true;
@@ -235,7 +241,7 @@ async function review(code) {
 
   let record;
   try {
-    record = findBox(code);
+    record = await findBox(code);
     $('box-name').textContent = record.fields['Contents (short)'] ?? '';
     $('box-type').textContent = record.fields['Container Type'] ?? '';
     // Checkbox values are true. Link values are lists of record IDs.
@@ -270,28 +276,47 @@ function clearReview() {
   $('done').disabled = false;
 }
 
-async function loadBoxes() {
+function boxQuery() {
   const params = new URLSearchParams();
-  for (const name of ['Code', 'Contents (short)', 'Container Type', field]) {
-    params.append('fields[]', name);
-  }
-  const byCode = new Map();
+  for (const name of BOX_FIELDS) params.append('fields[]', name);
+  return params;
+}
+
+async function loadBoxes() {
+  const cached = localStorage.getItem('boxes');
+  if (cached) return JSON.parse(cached);
+  const params = boxQuery();
+  const records = [];
   // Each call returns up to 100 records, plus an offset for the next page.
   let offset;
   do {
     if (offset) params.set('offset', offset);
     const page = await airtable(`${baseId}/${TABLE}?${params}`);
-    for (const record of page.records) {
-      const code = record.fields.Code;
-      byCode.set(code, [...(byCode.get(code) ?? []), record]);
-    }
+    records.push(...page.records);
     offset = page.offset;
   } while (offset);
+  const byCode = Object.groupBy(records, (record) => record.fields.Code);
+  localStorage.setItem('boxes', JSON.stringify(byCode));
   return byCode;
 }
 
-function findBox(code) {
-  const records = boxes.get(code) ?? [];
+function saveBoxes() {
+  localStorage.setItem('boxes', JSON.stringify(boxes));
+}
+
+async function findBox(code) {
+  // Boxes added since the cache was filled are missing from it.
+  if (!boxes[code]) {
+    const params = boxQuery();
+    // The code matches BOX_ID, so it is safe to put in a formula.
+    params.set('filterByFormula', `{Code} = '${code}'`);
+    const {records} = await airtable(`${baseId}/${TABLE}?${params}`);
+    if (records.length > 0) {
+      boxes[code] = records;
+      saveBoxes();
+    }
+  }
+  const records = boxes[code] ?? [];
   if (records.length === 0) throw new Error('No box has this code.');
   if (records.length > 1) throw new Error('More than one box has this code.');
   return records[0];
@@ -309,6 +334,7 @@ async function mark(code, record) {
       body: JSON.stringify({fields: {[field]: value}}),
     });
     record.fields[field] = value;
+    saveBoxes();
     item.className = 'saved';
   } catch (error) {
     item.className = 'failed';
@@ -335,7 +361,9 @@ $('forget').onclick = () => $('forget-dialog').showModal();
 
 $('forget-confirm').onclick = () => {
   localStorage.removeItem('airtableToken');
+  localStorage.removeItem('boxes');
   token = null;
+  boxes = null;
   revealToken(false);
   show('setup');
 };
