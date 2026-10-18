@@ -25,6 +25,8 @@ barcode labels.
     choose a room, then tap Start. The app does not change other
     fields or records.
 -   The scanner lists the boxes you accepted, with a count.
+-   A scan beeps high. A box that is already in the list on screen gives a
+    warning trill instead.
 -   The 🔦 button turns the camera light on and off. It shows only when the
     browser can control the light.
 -   Show token on the action page shows the saved token. Hide token hides it.

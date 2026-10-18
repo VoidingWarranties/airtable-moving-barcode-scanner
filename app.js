@@ -15,6 +15,7 @@ const SOUNDS = {
   scan: [[1800, 0.08]],
   accept: [[660, 0.04], [990, 0.04]],
   reject: [[180, 0.08]],
+  warn: [[1200, 0.02], [600, 0.02], [1200, 0.02], [600, 0.02]],
 };
 // A box often stays in view after review. Skip it until it leaves the view.
 const IGNORE_MS = 2000;
@@ -33,6 +34,8 @@ let stream;
 let field;
 let value;
 let ignored;
+// Box codes accepted since the action started.
+let accepted;
 let invertNext = false;
 
 function show(id) {
@@ -108,6 +111,7 @@ async function startScanning(fieldName, fieldValue, label) {
   field = fieldName;
   value = fieldValue;
   ignored = {};
+  accepted = new Set();
   // iOS only plays audio from a context that a user gesture started.
   audio ??= new AudioContext();
   audio.resume();
@@ -177,7 +181,7 @@ function invertedFrame(video) {
 }
 
 async function review(code) {
-  beep('scan');
+  beep(accepted.has(code) ? 'warn' : 'scan');
   const dialog = $('confirm');
   $('box-code').textContent = code;
   $('box-name').textContent = 'Looking up…';
@@ -208,6 +212,7 @@ async function review(code) {
   ignored = {code, seenAt: Date.now()};
   if (dialog.returnValue === 'accept') {
     beep('accept');
+    accepted.add(code);
     mark(code, record);
   } else {
     beep('reject');
