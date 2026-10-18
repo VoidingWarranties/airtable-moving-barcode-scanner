@@ -139,16 +139,22 @@ button.link {
   max-height: 50vh;
 }
 
+#queue-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#queue-list span {
+  flex: 1;
+}
+
 #queue-list .failed {
   color: #d33;
 }
 
 .pending::before {
   content: "⏳ ";
-}
-
-.saved::before {
-  content: "✅ ";
 }
 
 .failed {

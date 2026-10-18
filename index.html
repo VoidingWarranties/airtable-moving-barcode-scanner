@@ -31,6 +31,10 @@
     <p class="version">Version dev</p>
   </section>
 
+  <section id="loading" hidden>
+    <h1>Loading records…</h1>
+  </section>
+
   <section id="scanner" hidden>
     <div id="camera">
       <video id="video" playsinline muted></video>
@@ -80,9 +84,13 @@
     </form>
   </dialog>
 
+  <dialog id="updating-dialog">
+    <p id="updating-text"></p>
+  </dialog>
+
   <dialog id="forget-dialog">
     <form method="dialog">
-      <p>Forget token?</p>
+      <p id="forget-text"></p>
       <div class="buttons">
         <button id="forget-cancel">Cancel</button>
         <button id="forget-confirm">Forget</button>

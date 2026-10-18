@@ -31,6 +31,8 @@ let baseId;
 let detector;
 let audio;
 let stream;
+// Aborted when scanning stops.
+let action;
 let field;
 let value;
 let label;
@@ -41,7 +43,8 @@ let boxes;
 let accepted;
 // Updates not yet saved in Airtable. Failed updates stay for a retry.
 let queue = JSON.parse(localStorage.getItem('queue') ?? '[]');
-let submitting = false;
+// The submit in progress, if any.
+let submission;
 let invertNext = false;
 let lastBoxes;
 
@@ -62,7 +65,9 @@ async function airtable(path, options) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = body.error;
-    throw new Error(error?.message ?? error?.type ?? error ?? response.status);
+    throw Object.assign(
+        new Error(error?.message ?? error?.type ?? error ?? response.status),
+        {status: response.status});
   }
   return body;
 }
@@ -145,13 +150,20 @@ async function startScanning(fieldName, fieldValue, actionLabel) {
   showLasers([]);
   $('torch').hidden = true;
   $('torch').ariaPressed = 'false';
-  show('scanner');
+  action = new AbortController();
+  const {signal} = action;
+  show('loading');
   try {
-    boxes = await loadBoxes();
-    detector ??= await createDetector();
-    stream = await navigator.mediaDevices.getUserMedia(CAMERA);
+    [boxes, detector] =
+        await Promise.all([loadBoxes(), detector ?? createDetector()]);
+    show('scanner');
+    const cameraStream = await navigator.mediaDevices.getUserMedia(CAMERA);
     // The user can tap Done while the camera starts.
-    if ($('scanner').hidden) return stopScanning();
+    if (signal.aborted) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    stream = cameraStream;
     $('video').srcObject = stream;
     await $('video').play();
     const [track] = stream.getVideoTracks();
@@ -160,13 +172,14 @@ async function startScanning(fieldName, fieldValue, actionLabel) {
   } catch (error) {
     alert(error.message);
     stopScanning();
+    show('actions');
   }
 }
 
 function stopScanning() {
+  action.abort();
   stream?.getTracks().forEach((track) => track.stop());
   stream = null;
-  show('actions');
 }
 
 async function scan(activeStream) {
@@ -259,8 +272,10 @@ async function review(code) {
     record = findBox(code);
     $('box-name').textContent = record.fields['Contents (short)'] ?? '';
     $('box-type').textContent = record.fields['Container Type'] ?? '';
+    const queued = queue.find(
+        (update) => update.id === record.id && update.field === field);
     // Checkbox values are true. Link values are lists of record IDs.
-    if (String(record.fields[field]) === String(value)) {
+    if (String(queued?.value ?? record.fields[field]) === String(value)) {
       $('box-note').textContent = 'Already marked.';
     }
     $('accept').disabled = false;
@@ -322,7 +337,6 @@ function mark(code, record) {
   item.textContent = `${code} ${name}`;
   $('log').prepend(item);
   $('count').textContent = `${$('log').children.length} confirmed`;
-  record.fields[field] = value;
   // A later update of the same field replaces an earlier one.
   queue = queue.filter(
       (update) => update.id !== record.id || update.field !== field);
@@ -339,45 +353,85 @@ function renderQueue() {
   $('show-queue').textContent = `Queued updates (${queue.length})`;
   $('queue-empty').hidden = queue.length > 0;
   $('queue-list').replaceChildren(...queue.map((update) => {
+    const text = document.createElement('span');
+    text.textContent = `${update.code} ${update.name}: ${update.label}`;
+    if (update.error) text.textContent += ` (${update.error})`;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'link';
+    remove.textContent = 'Remove';
+    remove.onclick = () => {
+      queue = queue.filter((other) => other !== update);
+      saveQueue();
+    };
     const item = document.createElement('li');
     item.className = update.error ? 'failed' : 'pending';
-    item.textContent = `${update.code} ${update.name}: ${update.label}`;
-    if (update.error) item.textContent += ` (${update.error})`;
+    item.append(text, remove);
     return item;
   }));
-  $('queue-submit').disabled = submitting || queue.length === 0;
-  $('queue-submit').textContent = submitting ? 'Submitting…' : 'Submit';
+  $('queue-submit').disabled = Boolean(submission) || queue.length === 0;
+  $('queue-submit').textContent = submission ? 'Submitting…' : 'Submit';
 }
 
-async function submitQueue() {
-  if (submitting) return;
-  submitting = true;
-  renderQueue();
-  const byRecord = Object.entries(Object.groupBy(queue, (update) => update.id));
-  // Airtable updates at most 10 records per call.
-  for (let i = 0; i < byRecord.length; i += 10) {
-    const batch = byRecord.slice(i, i + 10);
-    const sent = batch.flatMap(([, updates]) => updates);
-    const records = batch.map(([id, updates]) => ({
-      id,
-      fields: Object.fromEntries(
-          updates.map((update) => [update.field, update.value])),
-    }));
-    try {
-      await airtable(`${baseId}/${TABLE}`, {
-        method: 'PATCH',
-        body: JSON.stringify({records}),
+// Describes how many records the updates change, e.g. "3 records".
+function recordsOf(updates) {
+  const count = new Set(updates.map((update) => update.id)).size;
+  return `${count} record${count === 1 ? '' : 's'}`;
+}
+
+// Joins a submit in progress rather than starting a second one.
+function submitQueue() {
+  submission ??= sendQueue()
+      .catch((error) => alert(error.message))
+      .finally(() => {
+        submission = null;
+        renderQueue();
       });
-      queue = queue.filter((update) => !sent.includes(update));
-    } catch (error) {
-      for (const update of sent) update.error = error.message;
-    }
-    saveQueue();
-    // Stays under the limit of 5 calls per second.
-    await sleep(200);
-  }
-  submitting = false;
   renderQueue();
+  return submission;
+}
+
+async function sendQueue() {
+  const tried = new Set();
+  // Also sends updates queued while this runs.
+  while (true) {
+    const untried = queue.filter((update) => !tried.has(update));
+    // Airtable updates at most 10 records per call.
+    const ids = [...new Set(untried.map((update) => update.id))].slice(0, 10);
+    const batch = untried.filter((update) => ids.includes(update.id));
+    if (batch.length === 0) return;
+    // Stays under the limit of 5 calls per second.
+    if (tried.size > 0) await sleep(200);
+    batch.forEach((update) => tried.add(update));
+    await sendBatch(batch);
+  }
+}
+
+async function sendBatch(updates) {
+  const records = Object.entries(Object.groupBy(updates, (update) => update.id))
+      .map(([id, recordUpdates]) => ({
+        id,
+        fields: Object.fromEntries(
+            recordUpdates.map((update) => [update.field, update.value])),
+      }));
+  try {
+    await airtable(`${baseId}/${TABLE}`, {
+      method: 'PATCH',
+      body: JSON.stringify({records}),
+    });
+    queue = queue.filter((update) => !updates.includes(update));
+  } catch (error) {
+    // One bad record fails the whole call, so retry each record alone.
+    if (records.length > 1 && [404, 422].includes(error.status)) {
+      for (const {id} of records) {
+        await sleep(200);
+        await sendBatch(updates.filter((update) => update.id === id));
+      }
+      return;
+    }
+    for (const update of updates) update.error = error.message;
+  }
+  saveQueue();
 }
 
 function revealToken(reveal) {
@@ -394,13 +448,20 @@ $('token-form').onsubmit = (event) => {
   init();
 };
 
-$('forget').onclick = () => $('forget-dialog').showModal();
+$('forget').onclick = () => {
+  $('forget-text').textContent = queue.length > 0 ?
+      'Forget token and queued updates?' :
+      'Forget token?';
+  $('forget-dialog').showModal();
+};
 
 $('forget-confirm').onclick = () => {
   localStorage.removeItem('airtableToken');
   localStorage.removeItem('baseId');
   localStorage.removeItem('rooms');
   token = null;
+  queue = [];
+  saveQueue();
   revealToken(false);
   show('setup');
 };
@@ -436,9 +497,20 @@ $('torch').onclick = async () => {
   }
 };
 
-$('done').onclick = () => {
+$('done').onclick = async () => {
   stopScanning();
-  submitQueue();
+  if (queue.length > 0) {
+    $('updating-text').textContent = `Updating ${recordsOf(queue)}…`;
+    $('updating-dialog').showModal();
+    await submitQueue();
+    $('updating-dialog').close();
+  }
+  show('actions');
+  const failed = queue.filter((update) => update.error);
+  if (failed.length > 0) {
+    beep('reject');
+    alert(`${recordsOf(failed)} failed to update. See Queued updates.`);
+  }
 };
 
 init();
