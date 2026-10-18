@@ -194,9 +194,25 @@ function outline(barcodes) {
   const video = $('video');
   $('outline').setAttribute(
       'viewBox', `0 0 ${video.videoWidth} ${video.videoHeight}`);
-  const path = ({cornerPoints}) =>
-      `M${cornerPoints.map(({x, y}) => `${x},${y}`).join(' ')}Z`;
+  const path = (barcode) =>
+      `M${box(barcode).map(({x, y}) => `${x},${y}`).join(' ')}Z`;
   $('outline').firstElementChild.setAttribute('d', barcodes.map(path).join(''));
+}
+
+// The polyfill reads one row of pixels at a time. Its corners are the ends of
+// the first and last rows it read, so only its sides follow the bars. Returns
+// the smallest box along the bars that holds all corners.
+function box({cornerPoints: [tl, tr, br, bl]}) {
+  const rotation = new DOMMatrix().rotateFromVector(
+      bl.x - tl.x + br.x - tr.x, bl.y - tl.y + br.y - tr.y);
+  const unrotation = rotation.inverse();
+  const points = [tl, tr, br, bl].map((p) => unrotation.transformPoint(p));
+  const xs = points.map(({x}) => x);
+  const ys = points.map(({y}) => y);
+  const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
+  const [minY, maxY] = [Math.min(...ys), Math.max(...ys)];
+  return [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]]
+      .map(([x, y]) => rotation.transformPoint({x, y}));
 }
 
 async function review(code) {
