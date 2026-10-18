@@ -31,32 +31,31 @@
   </section>
 
   <section id="scanner" hidden>
-    <video id="video" playsinline muted></video>
-    <!-- Slice matches the cover fit of the video. -->
-    <svg id="outline" preserveAspectRatio="xMidYMid slice"><path/></svg>
-    <header>
-      <span id="action-label"></span>
-      <button id="torch" aria-label="Flashlight" aria-pressed="false" hidden>🔦</button>
-      <button id="done">Done</button>
-    </header>
-    <div id="log-panel">
-      <p id="count"></p>
-      <ol id="log"></ol>
+    <div id="camera">
+      <video id="video" playsinline muted></video>
+      <!-- Slice matches the cover fit of the video. -->
+      <svg id="outline" preserveAspectRatio="xMidYMid slice"><path/></svg>
+      <header>
+        <span id="action-label"></span>
+        <button id="torch" aria-label="Flashlight" aria-pressed="false" hidden>🔦</button>
+        <button id="done">Done</button>
+      </header>
+      <div id="log-panel">
+        <p id="count"></p>
+        <ol id="log"></ol>
+      </div>
     </div>
-  </section>
-
-  <dialog id="confirm">
-    <form method="dialog">
+    <footer>
       <h2 id="box-code"></h2>
       <p id="box-name"></p>
       <p id="box-type"></p>
       <p id="box-note"></p>
       <div class="buttons">
-        <button id="reject" value="reject">Reject</button>
-        <button id="accept" value="accept">Accept</button>
+        <button id="reject" disabled>Reject</button>
+        <button id="accept" disabled>Accept</button>
       </div>
-    </form>
-  </dialog>
+    </footer>
+  </section>
 
   <dialog id="room-dialog">
     <form method="dialog">

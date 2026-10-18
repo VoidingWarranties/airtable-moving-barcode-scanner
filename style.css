@@ -55,8 +55,14 @@ button.link {
   position: fixed;
   inset: 0;
   padding: 0;
+  gap: 0;
   background: black;
   color: white;
+}
+
+#camera {
+  position: relative;
+  flex: 1;
 }
 
 #video,
@@ -141,6 +147,47 @@ button.link {
   content: "❌ ";
 }
 
+#scanner footer {
+  display: grid;
+  /* The code is left of the name, which is on top of the type. */
+  grid-template-columns: auto minmax(0, 1fr);
+  /* Fixed rows keep the footer the same size with or without a box. */
+  grid-template-rows: 1lh 1lh minmax(1lh, auto);
+  column-gap: 1rem;
+  padding: 1rem;
+  font-size: 1.25rem;
+}
+
+#scanner footer p {
+  margin: 0;
+}
+
+#box-code {
+  grid-row: span 2;
+  align-self: center;
+  margin: 0;
+  font-family: monospace;
+  font-size: 2.5rem;
+}
+
+#box-name,
+#box-type {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+#box-note {
+  grid-column: span 2;
+  font-weight: bold;
+}
+
+#scanner .buttons {
+  grid-column: span 2;
+  margin-top: 0.5rem;
+}
+
 dialog {
   box-sizing: border-box;
   width: min(90vw, 24rem);
@@ -153,29 +200,10 @@ dialog::backdrop {
   background: rgb(0 0 0 / 0.6);
 }
 
-/* Keeps the scanned barcodes in view. */
-#confirm {
-  margin-bottom: 1rem;
-}
-
-#confirm::backdrop {
-  background: none;
-}
-
 dialog p,
 dialog label {
   margin: 0;
   font-size: 1.25rem;
-}
-
-#box-code {
-  margin: 0;
-  font-family: monospace;
-  font-size: 2.5rem;
-}
-
-#box-note {
-  font-weight: bold;
 }
 
 .buttons {
@@ -204,6 +232,7 @@ dialog label {
   background: #2a2;
 }
 
+#reject:disabled,
 #accept:disabled {
   opacity: 0.4;
 }

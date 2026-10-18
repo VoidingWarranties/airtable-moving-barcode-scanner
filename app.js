@@ -217,16 +217,15 @@ function box({cornerPoints: [tl, tr, br, bl]}) {
 
 async function review(code) {
   beep(accepted.has(code) ? 'warn' : 'scan');
-  const dialog = $('confirm');
   $('box-code').textContent = code;
   $('box-name').textContent = 'Looking up…';
-  $('box-type').textContent = '';
-  $('box-note').textContent = '';
-  $('accept').disabled = true;
-  dialog.returnValue = '';
-  dialog.showModal();
-  const closed = new Promise(
-      (resolve) => dialog.addEventListener('close', resolve, {once: true}));
+  $('reject').disabled = false;
+  // Stopping now would leave this review open.
+  $('done').disabled = true;
+  const decided = new Promise((resolve) => {
+    $('reject').onclick = () => resolve('reject');
+    $('accept').onclick = () => resolve('accept');
+  });
 
   let record;
   try {
@@ -243,15 +242,25 @@ async function review(code) {
     $('box-note').textContent = error.message;
   }
 
-  await closed;
+  const choice = await decided;
+  clearReview();
   ignored = {code, seenAt: Date.now()};
-  if (dialog.returnValue === 'accept') {
+  if (choice === 'accept') {
     beep('accept');
     accepted.add(code);
     mark(code, record);
   } else {
     beep('reject');
   }
+}
+
+function clearReview() {
+  for (const id of ['box-code', 'box-name', 'box-type', 'box-note']) {
+    $(id).textContent = '';
+  }
+  $('reject').disabled = true;
+  $('accept').disabled = true;
+  $('done').disabled = false;
 }
 
 async function findBox(code) {
