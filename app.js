@@ -259,6 +259,7 @@ $('token-form').onsubmit = (event) => {
 };
 
 $('forget').onclick = () => {
+  if (!confirm('Forget token?')) return;
   localStorage.removeItem('airtableToken');
   token = null;
   revealToken(false);
