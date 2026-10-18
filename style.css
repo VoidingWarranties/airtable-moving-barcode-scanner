@@ -130,7 +130,8 @@ dialog::backdrop {
   background: rgb(0 0 0 / 0.6);
 }
 
-dialog p {
+dialog p,
+dialog label {
   margin: 0;
   font-size: 1.25rem;
 }
@@ -160,7 +161,12 @@ dialog p {
   background: #c33;
 }
 
-#accept {
+#room-cancel {
+  background: gray;
+}
+
+#accept,
+#room-start {
   background: #2a2;
 }
 

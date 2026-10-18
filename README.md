@@ -21,8 +21,8 @@ barcode labels.
 -   Finds the box by the `Code` field of the `Containers` table in the
     `Moving + Packing 2026` base.
 -   Accept sets the `Loaded in van` or `Moved to condo` checkbox of that box.
-    To set the `Final Location` of boxes instead, choose a room under Final
-    location, then tap Mark final location. The app does not change other
+    To set the `Final Location` of boxes instead, tap Record final location,
+    choose a room, then tap Start. The app does not change other
     fields or records.
 -   The 🔦 button turns the camera light on and off. It shows only when the
     browser can control the light.

@@ -272,7 +272,10 @@ for (const button of document.querySelectorAll('[data-field]')) {
       () => startScanning(button.dataset.field, true, button.textContent);
 }
 
-$('mark-room').onclick = () => {
+$('record-room').onclick = () => $('room-dialog').showModal();
+
+// Starts in the click handler, as iOS only plays audio after a user gesture.
+$('room-start').onclick = () => {
   const room = $('room').selectedOptions[0];
   if (!room) return;
   startScanning('Final Location', [room.value], `Mark as in ${room.text}`);
