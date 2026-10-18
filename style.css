@@ -85,21 +85,32 @@ button.link {
   background: #fd0;
 }
 
-#log {
+#log-panel {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
+  display: flex;
+  flex-direction: column;
   max-height: 40%;
-  overflow: auto;
-  margin: 0;
   padding: 0.5rem 1rem;
-  list-style: none;
   background: rgb(0 0 0 / 0.6);
 }
 
-#log:empty {
+#log-panel:has(#log:empty) {
   display: none;
+}
+
+#count {
+  margin: 0;
+  font-weight: bold;
+}
+
+#log {
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .pending::before {

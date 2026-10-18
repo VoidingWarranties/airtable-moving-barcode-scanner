@@ -231,6 +231,7 @@ async function mark(code, record) {
   item.className = 'pending';
   item.textContent = `${code} ${record.fields['Contents (short)'] ?? ''}`;
   $('log').prepend(item);
+  $('count').textContent = `${$('log').children.length} confirmed`;
   try {
     await airtable(`${baseId}/${TABLE}/${record.id}`, {
       method: 'PATCH',

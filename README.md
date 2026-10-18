@@ -24,6 +24,7 @@ barcode labels.
     To set the `Final Location` of boxes instead, tap Record final location,
     choose a room, then tap Start. The app does not change other
     fields or records.
+-   The scanner lists the boxes you accepted, with a count.
 -   The 🔦 button turns the camera light on and off. It shows only when the
     browser can control the light.
 -   Show token on the action page shows the saved token. Hide token hides it.
