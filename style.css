@@ -23,6 +23,7 @@ section {
 }
 
 input,
+select,
 button {
   font-family: inherit;
   font-size: 1.25rem;

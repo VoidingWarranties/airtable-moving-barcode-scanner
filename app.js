@@ -1,5 +1,6 @@
 const BASE_NAME = 'Moving + Packing 2026';
 const TABLE = 'Containers';
+const ROOMS = 'Destination Room';
 const API = 'https://api.airtable.com/v0';
 // Boxes also carry product barcodes. Only accept our own labels.
 const BOX_ID = /^[A-Z]{2}[0-9]+$/;
@@ -30,6 +31,7 @@ let detector;
 let audio;
 let stream;
 let field;
+let value;
 let ignored;
 let invertNext = false;
 
@@ -64,11 +66,22 @@ async function init() {
     const {bases} = await airtable('meta/bases');
     baseId = bases.find((base) => base.name === BASE_NAME)?.id;
     if (!baseId) throw new Error(`Base "${BASE_NAME}" not found.`);
+    await loadRooms();
     show('actions');
   } catch (error) {
     $('setup-error').textContent = error.message;
     show('setup');
   }
+}
+
+async function loadRooms() {
+  const params = new URLSearchParams({
+    'fields[]': 'Name',
+    'sort[0][field]': 'Name',
+  });
+  const {records} = await airtable(`${baseId}/${ROOMS}?${params}`);
+  $('room').replaceChildren(
+      ...records.map(({id, fields}) => new Option(fields.Name, id)));
 }
 
 async function createDetector() {
@@ -91,8 +104,9 @@ function beep(name) {
   }
 }
 
-async function startScanning(fieldName, label) {
+async function startScanning(fieldName, fieldValue, label) {
   field = fieldName;
+  value = fieldValue;
   ignored = {};
   // iOS only plays audio from a context that a user gesture started.
   audio ??= new AudioContext();
@@ -180,7 +194,10 @@ async function review(code) {
     record = await findBox(code);
     $('box-name').textContent = record.fields['Contents (short)'] ?? '';
     $('box-type').textContent = record.fields['Container Type'] ?? '';
-    if (record.fields[field]) $('box-note').textContent = 'Already marked.';
+    // Checkbox values are true. Link values are lists of record IDs.
+    if (String(record.fields[field]) === String(value)) {
+      $('box-note').textContent = 'Already marked.';
+    }
     $('accept').disabled = false;
   } catch (error) {
     $('box-name').textContent = '';
@@ -217,7 +234,7 @@ async function mark(code, record) {
   try {
     await airtable(`${baseId}/${TABLE}/${record.id}`, {
       method: 'PATCH',
-      body: JSON.stringify({fields: {[field]: true}}),
+      body: JSON.stringify({fields: {[field]: value}}),
     });
     item.className = 'saved';
   } catch (error) {
@@ -251,8 +268,15 @@ $('forget').onclick = () => {
 $('reveal').onclick = () => revealToken($('token-value').hidden);
 
 for (const button of document.querySelectorAll('[data-field]')) {
-  button.onclick = () => startScanning(button.dataset.field, button.textContent);
+  button.onclick =
+      () => startScanning(button.dataset.field, true, button.textContent);
 }
+
+$('mark-room').onclick = () => {
+  const room = $('room').selectedOptions[0];
+  if (!room) return;
+  startScanning('Final Location', [room.value], `Mark as in ${room.text}`);
+};
 
 $('torch').onclick = async () => {
   const on = $('torch').ariaPressed !== 'true';
