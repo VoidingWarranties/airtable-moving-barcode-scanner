@@ -216,6 +216,8 @@ function box({cornerPoints: [tl, tr, br, bl]}) {
 }
 
 async function review(code) {
+  // Holds the image so that the boxes stay on their barcodes.
+  $('video').pause();
   beep(accepted.has(code) ? 'warn' : 'scan');
   $('box-code').textContent = code;
   $('box-name').textContent = 'Looking up…';
@@ -243,6 +245,7 @@ async function review(code) {
   }
 
   const choice = await decided;
+  $('video').play();
   clearReview();
   ignored = {code, seenAt: Date.now()};
   if (choice === 'accept') {
