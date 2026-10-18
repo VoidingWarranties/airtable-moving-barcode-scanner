@@ -227,6 +227,12 @@ async function mark(code, record) {
   }
 }
 
+function revealToken(reveal) {
+  $('token-value').textContent = token;
+  $('token-value').hidden = !reveal;
+  $('reveal').textContent = reveal ? 'Hide token' : 'Show token';
+}
+
 $('token-form').onsubmit = (event) => {
   event.preventDefault();
   token = $('token').value.trim();
@@ -238,8 +244,11 @@ $('token-form').onsubmit = (event) => {
 $('forget').onclick = () => {
   localStorage.removeItem('airtableToken');
   token = null;
+  revealToken(false);
   show('setup');
 };
+
+$('reveal').onclick = () => revealToken($('token-value').hidden);
 
 for (const button of document.querySelectorAll('[data-field]')) {
   button.onclick = () => startScanning(button.dataset.field, button.textContent);

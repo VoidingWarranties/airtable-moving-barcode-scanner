@@ -40,6 +40,10 @@ button.link {
   color: #d33;
 }
 
+#token-value {
+  overflow-wrap: anywhere;
+}
+
 .version {
   margin: 0;
   color: gray;
