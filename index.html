@@ -24,6 +24,7 @@
     <button data-field="Loaded in van">Mark as loaded into van</button>
     <button data-field="Moved to condo">Mark as moved into condo</button>
     <button id="record-room">Record final location</button>
+    <button id="show-queue"></button>
     <button id="reveal" class="link">Show token</button>
     <code id="token-value" hidden></code>
     <button id="forget" class="link">Forget token</button>
@@ -64,6 +65,17 @@
       <div class="buttons">
         <button id="room-cancel">Cancel</button>
         <button id="room-start">Start</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="queue-dialog">
+    <form method="dialog">
+      <p id="queue-empty">No queued updates.</p>
+      <ol id="queue-list"></ol>
+      <div class="buttons">
+        <button id="queue-close">Close</button>
+        <button id="queue-submit" type="button"></button>
       </div>
     </form>
   </dialog>

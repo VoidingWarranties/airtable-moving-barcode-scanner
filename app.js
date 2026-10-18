@@ -1,11 +1,6 @@
 const BASE_NAME = 'Moving + Packing 2026';
 const TABLE = 'Containers';
 const ROOMS = 'Destination Room';
-// Box fields the app shows, plus the field of every action.
-const BOX_FIELDS = [
-  'Code', 'Contents (short)', 'Container Type',
-  'Loaded in van', 'Moved to condo', 'Final Location',
-];
 const API = 'https://api.airtable.com/v0';
 // Boxes also carry product barcodes. Only accept our own labels.
 const BOX_ID = /^[A-Z]{2}[0-9]+$/;
@@ -38,11 +33,15 @@ let audio;
 let stream;
 let field;
 let value;
+let label;
 let ignored;
-// Lists of box records by code, cached in local storage.
+// Lists of box records by code, loaded when the action starts.
 let boxes;
 // Box codes accepted since the action started.
 let accepted;
+// Updates not yet saved in Airtable. Failed updates stay for a retry.
+let queue = JSON.parse(localStorage.getItem('queue') ?? '[]');
+let submitting = false;
 let invertNext = false;
 let lastBoxes;
 
@@ -69,20 +68,37 @@ async function airtable(path, options) {
 }
 
 async function init() {
+  renderQueue();
   if (!token) {
     show('setup');
     return;
   }
   try {
-    const {bases} = await airtable('meta/bases');
-    baseId = bases.find((base) => base.name === BASE_NAME)?.id;
-    if (!baseId) throw new Error(`Base "${BASE_NAME}" not found.`);
-    await loadRooms();
+    // These rarely change, so they are fetched only once per token.
+    baseId = await cached('baseId', findBase);
+    const rooms = await cached('rooms', loadRooms);
+    $('room').replaceChildren(
+        ...rooms.map(({id, name}) => new Option(name, id)));
     show('actions');
   } catch (error) {
     $('setup-error').textContent = error.message;
     show('setup');
   }
+}
+
+async function cached(key, load) {
+  const stored = localStorage.getItem(key);
+  if (stored) return JSON.parse(stored);
+  const result = await load();
+  localStorage.setItem(key, JSON.stringify(result));
+  return result;
+}
+
+async function findBase() {
+  const {bases} = await airtable('meta/bases');
+  const id = bases.find((base) => base.name === BASE_NAME)?.id;
+  if (!id) throw new Error(`Base "${BASE_NAME}" not found.`);
+  return id;
 }
 
 async function loadRooms() {
@@ -91,8 +107,7 @@ async function loadRooms() {
     'sort[0][field]': 'Name',
   });
   const {records} = await airtable(`${baseId}/${ROOMS}?${params}`);
-  $('room').replaceChildren(
-      ...records.map(({id, fields}) => new Option(fields.Name, id)));
+  return records.map(({id, fields}) => ({id, name: fields.Name}));
 }
 
 async function createDetector() {
@@ -115,9 +130,10 @@ function beep(name) {
   }
 }
 
-async function startScanning(fieldName, fieldValue, label) {
+async function startScanning(fieldName, fieldValue, actionLabel) {
   field = fieldName;
   value = fieldValue;
+  label = actionLabel;
   ignored = {};
   accepted = new Set();
   lastBoxes = [];
@@ -131,7 +147,7 @@ async function startScanning(fieldName, fieldValue, label) {
   $('torch').ariaPressed = 'false';
   show('scanner');
   try {
-    boxes ??= await loadBoxes();
+    boxes = await loadBoxes();
     detector ??= await createDetector();
     stream = await navigator.mediaDevices.getUserMedia(CAMERA);
     // The user can tap Done while the camera starts.
@@ -230,7 +246,6 @@ async function review(code) {
   $('video').pause();
   beep(accepted.has(code) ? 'warn' : 'scan');
   $('box-code').textContent = code;
-  $('box-name').textContent = 'Looking up…';
   $('reject').disabled = false;
   // Stopping now would leave this review open.
   $('done').disabled = true;
@@ -241,7 +256,7 @@ async function review(code) {
 
   let record;
   try {
-    record = await findBox(code);
+    record = findBox(code);
     $('box-name').textContent = record.fields['Contents (short)'] ?? '';
     $('box-type').textContent = record.fields['Container Type'] ?? '';
     // Checkbox values are true. Link values are lists of record IDs.
@@ -276,16 +291,11 @@ function clearReview() {
   $('done').disabled = false;
 }
 
-function boxQuery() {
-  const params = new URLSearchParams();
-  for (const name of BOX_FIELDS) params.append('fields[]', name);
-  return params;
-}
-
 async function loadBoxes() {
-  const cached = localStorage.getItem('boxes');
-  if (cached) return JSON.parse(cached);
-  const params = boxQuery();
+  const params = new URLSearchParams();
+  for (const name of ['Code', 'Contents (short)', 'Container Type', field]) {
+    params.append('fields[]', name);
+  }
   const records = [];
   // Each call returns up to 100 records, plus an offset for the next page.
   let offset;
@@ -295,52 +305,79 @@ async function loadBoxes() {
     records.push(...page.records);
     offset = page.offset;
   } while (offset);
-  const byCode = Object.groupBy(records, (record) => record.fields.Code);
-  localStorage.setItem('boxes', JSON.stringify(byCode));
-  return byCode;
+  return Object.groupBy(records, (record) => record.fields.Code);
 }
 
-function saveBoxes() {
-  localStorage.setItem('boxes', JSON.stringify(boxes));
-}
-
-async function findBox(code) {
-  // Boxes added since the cache was filled are missing from it.
-  if (!boxes[code]) {
-    const params = boxQuery();
-    // The code matches BOX_ID, so it is safe to put in a formula.
-    params.set('filterByFormula', `{Code} = '${code}'`);
-    const {records} = await airtable(`${baseId}/${TABLE}?${params}`);
-    if (records.length > 0) {
-      boxes[code] = records;
-      saveBoxes();
-    }
-  }
+function findBox(code) {
   const records = boxes[code] ?? [];
   if (records.length === 0) throw new Error('No box has this code.');
   if (records.length > 1) throw new Error('More than one box has this code.');
   return records[0];
 }
 
-async function mark(code, record) {
+function mark(code, record) {
+  const name = record.fields['Contents (short)'] ?? '';
   const item = document.createElement('li');
   item.className = 'pending';
-  item.textContent = `${code} ${record.fields['Contents (short)'] ?? ''}`;
+  item.textContent = `${code} ${name}`;
   $('log').prepend(item);
   $('count').textContent = `${$('log').children.length} confirmed`;
-  try {
-    await airtable(`${baseId}/${TABLE}/${record.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({fields: {[field]: value}}),
-    });
-    record.fields[field] = value;
-    saveBoxes();
-    item.className = 'saved';
-  } catch (error) {
-    item.className = 'failed';
-    item.textContent += `: ${error.message}`;
-    beep('reject');
+  record.fields[field] = value;
+  // A later update of the same field replaces an earlier one.
+  queue = queue.filter(
+      (update) => update.id !== record.id || update.field !== field);
+  queue.push({id: record.id, code, name, field, value, label});
+  saveQueue();
+}
+
+function saveQueue() {
+  localStorage.setItem('queue', JSON.stringify(queue));
+  renderQueue();
+}
+
+function renderQueue() {
+  $('show-queue').textContent = `Queued updates (${queue.length})`;
+  $('queue-empty').hidden = queue.length > 0;
+  $('queue-list').replaceChildren(...queue.map((update) => {
+    const item = document.createElement('li');
+    item.className = update.error ? 'failed' : 'pending';
+    item.textContent = `${update.code} ${update.name}: ${update.label}`;
+    if (update.error) item.textContent += ` (${update.error})`;
+    return item;
+  }));
+  $('queue-submit').disabled = submitting || queue.length === 0;
+  $('queue-submit').textContent = submitting ? 'Submitting…' : 'Submit';
+}
+
+async function submitQueue() {
+  if (submitting) return;
+  submitting = true;
+  renderQueue();
+  const byRecord = Object.entries(Object.groupBy(queue, (update) => update.id));
+  // Airtable updates at most 10 records per call.
+  for (let i = 0; i < byRecord.length; i += 10) {
+    const batch = byRecord.slice(i, i + 10);
+    const sent = batch.flatMap(([, updates]) => updates);
+    const records = batch.map(([id, updates]) => ({
+      id,
+      fields: Object.fromEntries(
+          updates.map((update) => [update.field, update.value])),
+    }));
+    try {
+      await airtable(`${baseId}/${TABLE}`, {
+        method: 'PATCH',
+        body: JSON.stringify({records}),
+      });
+      queue = queue.filter((update) => !sent.includes(update));
+    } catch (error) {
+      for (const update of sent) update.error = error.message;
+    }
+    saveQueue();
+    // Stays under the limit of 5 calls per second.
+    await sleep(200);
   }
+  submitting = false;
+  renderQueue();
 }
 
 function revealToken(reveal) {
@@ -361,9 +398,9 @@ $('forget').onclick = () => $('forget-dialog').showModal();
 
 $('forget-confirm').onclick = () => {
   localStorage.removeItem('airtableToken');
-  localStorage.removeItem('boxes');
+  localStorage.removeItem('baseId');
+  localStorage.removeItem('rooms');
   token = null;
-  boxes = null;
   revealToken(false);
   show('setup');
 };
@@ -376,6 +413,10 @@ for (const button of document.querySelectorAll('[data-field]')) {
 }
 
 $('record-room').onclick = () => $('room-dialog').showModal();
+
+$('show-queue').onclick = () => $('queue-dialog').showModal();
+
+$('queue-submit').onclick = submitQueue;
 
 // Starts in the click handler, as iOS only plays audio after a user gesture.
 $('room-start').onclick = () => {
@@ -395,6 +436,9 @@ $('torch').onclick = async () => {
   }
 };
 
-$('done').onclick = stopScanning;
+$('done').onclick = () => {
+  stopScanning();
+  submitQueue();
+};
 
 init();

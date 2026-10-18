@@ -20,14 +20,19 @@ barcode labels.
     on black. A red line, like a scanner laser, crosses each box label in
     view. The image freezes until you accept or reject the box.
 -   Finds the box by the `Code` field of the `Containers` table in the
-    `Moving + Packing 2026` base. The app loads all boxes once and keeps
-    them in the local storage of the browser. It fetches a box that is
-    missing from this cache when you scan it. Changes made elsewhere to a
-    cached box don't show. Forget token clears the cache.
+    `Moving + Packing 2026` base. The app loads all boxes when an action
+    starts.
+-   The app fetches the base and the rooms once and keeps them in the local
+    storage of the browser. Forget token clears them, so new rooms show.
 -   Accept sets the `Loaded in van` or `Moved to condo` checkbox of that box.
     To set the `Final Location` of boxes instead, tap Record final location,
     choose a room, then tap Start. The app does not change other
     fields or records.
+-   Accept queues the update in the local storage of the browser. Done
+    sends the queue to AirTable, 10 boxes per call. Updates that fail stay
+    in the queue, with the error.
+-   Queued updates on the action page shows the queue. Submit sends it
+    again. The queue survives a reload or crash of the page.
 -   The scanner lists the boxes you accepted, with a count.
 -   A scan beeps high. A box that is already in the list on screen gives a
     warning trill instead.
