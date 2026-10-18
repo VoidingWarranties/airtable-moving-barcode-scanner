@@ -38,7 +38,7 @@ let value;
 let label;
 let ignored;
 // Lists of box records by code, loaded when the action starts.
-let boxes;
+let recordsByCode;
 // Box codes accepted since the action started.
 let accepted;
 // Updates not yet saved in Airtable. Failed updates stay for a retry.
@@ -154,7 +154,7 @@ async function startScanning(fieldName, fieldValue, actionLabel) {
   const {signal} = action;
   show('loading');
   try {
-    [boxes, detector] =
+    [recordsByCode, detector] =
         await Promise.all([loadBoxes(), detector ?? createDetector()]);
     show('scanner');
     const cameraStream = await navigator.mediaDevices.getUserMedia(CAMERA);
@@ -324,7 +324,7 @@ async function loadBoxes() {
 }
 
 function findBox(code) {
-  const records = boxes[code] ?? [];
+  const records = recordsByCode[code] ?? [];
   if (records.length === 0) throw new Error('No box has this code.');
   if (records.length > 1) throw new Error('More than one box has this code.');
   return records[0];
